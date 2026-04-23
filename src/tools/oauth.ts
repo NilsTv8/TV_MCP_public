@@ -1,5 +1,5 @@
 import { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { createHash, randomBytes } from "crypto";
+import { randomBytes } from "crypto";
 import { loadTokens, saveTokens, clearTokens, TokenData } from "../token-store.js";
 import { startCallbackServer, stopCallbackServer, isCallbackServerRunning } from "../callback-server.js";
 
@@ -10,12 +10,6 @@ const REVOKE_URL = "https://webapi.teamviewer.com/api/v1/OAuth2/revoke";
 
 function base64url(buf: Buffer): string {
   return buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
-}
-
-function generatePKCE(): { verifier: string; challenge: string } {
-  const verifier = base64url(randomBytes(32));
-  const challenge = base64url(createHash("sha256").update(verifier).digest());
-  return { verifier, challenge };
 }
 
 function getOAuthCredentials(): { clientId: string; clientSecret: string; redirectUri: string } {
@@ -37,9 +31,6 @@ function getOAuthCredentials(): { clientId: string; clientSecret: string; redire
 
   return { clientId, clientSecret, redirectUri };
 }
-
-// In-memory PKCE verifier store (lives for the duration of the auth flow)
-const pkceStore = new Map<string, string>();
 
 export const oauthTools: Tool[] = [
   {
@@ -122,10 +113,7 @@ export async function handleOAuthTool(
   switch (name) {
     case "tv_oauth_get_auth_url": {
       const { clientId, clientSecret, redirectUri } = getOAuthCredentials();
-      const { verifier, challenge } = generatePKCE();
       const state = base64url(randomBytes(16));
-
-      pkceStore.set(state, verifier);
 
       const params = new URLSearchParams({
         response_type: "code",
@@ -133,8 +121,6 @@ export async function handleOAuthTool(
         redirect_uri: redirectUri,
         display: "popup",
         state,
-        code_challenge: challenge,
-        code_challenge_method: "S256",
       });
       if (args.scope) params.set("scope", args.scope as string);
 
@@ -144,7 +130,7 @@ export async function handleOAuthTool(
 
       // Start the callback server in the background — it will auto-exchange
       // the code and save the token when the browser redirects back
-      startCallbackServer(state, clientId, clientSecret, redirectUri, verifier, port)
+      startCallbackServer(state, clientId, clientSecret, redirectUri, port)
         .then(() => {
           console.error("[teamviewer-mcp] OAuth flow completed successfully.");
         })
@@ -168,23 +154,16 @@ export async function handleOAuthTool(
       const { clientId, clientSecret, redirectUri } = getOAuthCredentials();
       const { code } = args as { code: string };
 
-      const verifier = pkceStore.size > 0
-        ? [...pkceStore.values()].at(-1)!
-        : undefined;
-
-      const body: Record<string, unknown> = {
-        grant_type: 0,
-        code,
-        redirect_uri: redirectUri,
-        client_id: clientId,
-        client_secret: clientSecret,
-      };
-      if (verifier) body.code_verifier = verifier;
-
       const resp = await fetch(TOKEN_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          grant_type: 0,
+          code,
+          redirect_uri: redirectUri,
+          client_id: clientId,
+          client_secret: clientSecret,
+        }),
       });
 
       if (!resp.ok) {
@@ -199,8 +178,6 @@ export async function handleOAuthTool(
         token_type?: string;
         scope?: string;
       };
-
-      pkceStore.clear();
 
       const data: TokenData = {
         access_token: token.access_token,

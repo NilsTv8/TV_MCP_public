@@ -65,7 +65,6 @@ export function startCallbackServer(
   clientId: string,
   clientSecret: string,
   redirectUri: string,
-  codeVerifier: string | undefined,
   port = 443,
   timeoutMs = 5 * 60 * 1000
 ): Promise<void> {
@@ -108,19 +107,16 @@ export function startCallbackServer(
 
         // Exchange code for token
         try {
-          const body: Record<string, unknown> = {
-            grant_type: 0,
-            code: String(code),
-            redirect_uri: redirectUri,
-            client_id: clientId,
-            client_secret: clientSecret,
-          };
-          if (codeVerifier) body.code_verifier = codeVerifier;
-
           const tokenResp = await fetch(TOKEN_URL, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
+            body: JSON.stringify({
+              grant_type: 0,
+              code: String(code),
+              redirect_uri: redirectUri,
+              client_id: clientId,
+              client_secret: clientSecret,
+            }),
           });
 
           if (!tokenResp.ok) {
