@@ -10,24 +10,34 @@ import { TeamViewerClient } from "./client.js";
 
 import { accountTools, handleAccountTool } from "./tools/account.js";
 import { companyTools, handleCompanyTool } from "./tools/company.js";
+import { deviceGroupTools, handleDeviceGroupTool } from "./tools/device-groups.js";
 import { deviceTools, handleDeviceTool } from "./tools/devices.js";
 import { contactTools, handleContactTool } from "./tools/contacts.js";
-import { sessionTools, handleSessionTool } from "./tools/sessions.js";
-import { reportTools, handleReportTool } from "./tools/reports.js";
+import { eventLoggingTools, handleEventLoggingTool } from "./tools/event-logging.js";
+import { managedDeviceTools, handleManagedDeviceTool } from "./tools/managed-devices.js";
 import { managedGroupTools, handleManagedGroupTool } from "./tools/managed-groups.js";
-import { chatTools, handleChatTool } from "./tools/chat.js";
-import { addressBookTools, handleAddressBookTool } from "./tools/address-book.js";
+import { monitoringTools, handleMonitoringTool } from "./tools/monitoring.js";
+import { policyTools, handlePolicyTool } from "./tools/policies.js";
+import { reportTools, handleReportTool } from "./tools/reports.js";
+import { sessionTools, handleSessionTool } from "./tools/sessions.js";
+import { userTools, handleUserTool } from "./tools/users.js";
+import { userRoleTools, handleUserRoleTool } from "./tools/user-roles.js";
 
 const ALL_TOOLS = [
   ...accountTools,
   ...companyTools,
+  ...deviceGroupTools,
   ...deviceTools,
   ...contactTools,
-  ...sessionTools,
-  ...reportTools,
+  ...eventLoggingTools,
+  ...managedDeviceTools,
   ...managedGroupTools,
-  ...chatTools,
-  ...addressBookTools,
+  ...monitoringTools,
+  ...policyTools,
+  ...reportTools,
+  ...sessionTools,
+  ...userTools,
+  ...userRoleTools,
 ];
 
 const TOOL_HANDLERS: Record<
@@ -36,13 +46,18 @@ const TOOL_HANDLERS: Record<
 > = {
   ...Object.fromEntries(accountTools.map((t) => [t.name, handleAccountTool])),
   ...Object.fromEntries(companyTools.map((t) => [t.name, handleCompanyTool])),
+  ...Object.fromEntries(deviceGroupTools.map((t) => [t.name, handleDeviceGroupTool])),
   ...Object.fromEntries(deviceTools.map((t) => [t.name, handleDeviceTool])),
   ...Object.fromEntries(contactTools.map((t) => [t.name, handleContactTool])),
-  ...Object.fromEntries(sessionTools.map((t) => [t.name, handleSessionTool])),
-  ...Object.fromEntries(reportTools.map((t) => [t.name, handleReportTool])),
+  ...Object.fromEntries(eventLoggingTools.map((t) => [t.name, handleEventLoggingTool])),
+  ...Object.fromEntries(managedDeviceTools.map((t) => [t.name, handleManagedDeviceTool])),
   ...Object.fromEntries(managedGroupTools.map((t) => [t.name, handleManagedGroupTool])),
-  ...Object.fromEntries(chatTools.map((t) => [t.name, handleChatTool])),
-  ...Object.fromEntries(addressBookTools.map((t) => [t.name, handleAddressBookTool])),
+  ...Object.fromEntries(monitoringTools.map((t) => [t.name, handleMonitoringTool])),
+  ...Object.fromEntries(policyTools.map((t) => [t.name, handlePolicyTool])),
+  ...Object.fromEntries(reportTools.map((t) => [t.name, handleReportTool])),
+  ...Object.fromEntries(sessionTools.map((t) => [t.name, handleSessionTool])),
+  ...Object.fromEntries(userTools.map((t) => [t.name, handleUserTool])),
+  ...Object.fromEntries(userRoleTools.map((t) => [t.name, handleUserRoleTool])),
 };
 
 function getClient(): TeamViewerClient {
