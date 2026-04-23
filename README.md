@@ -43,7 +43,7 @@ Before running the server you must register an OAuth2 application in the TeamVie
 3. Fill in the required fields:
    - **Name** — any descriptive name (e.g. `My MCP Server`)
    - **Description** — optional
-   - **Redirect URI** — the URI TeamViewer will redirect to after the user authorizes. For local use `http://localhost` works (you only need to copy the `code` from the redirect URL — no server required).
+   - **Redirect URI** — the URI TeamViewer will redirect to after the user authorizes. For local use `http://localhost` works (you only need to copy the `code` from the redirect URL — no server required). The authorization page opens as a popup.
    - **Scopes** — select the permissions your app needs (see [Available Scopes](#available-scopes) below).
 4. Click **Save**. Copy the **Client ID** and **Client Secret** — you will need them in the next step.
 

@@ -2,7 +2,7 @@ import { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { createHash, randomBytes } from "crypto";
 import { loadTokens, saveTokens, clearTokens, TokenData } from "../token-store.js";
 
-const AUTHORIZE_URL = "https://login.teamviewer.com/oauth2/authorize";
+const AUTHORIZE_URL = "https://account.teamviewer.com/oauth2/authorize";
 const TOKEN_URL = "https://webapi.teamviewer.com/api/v1/OAuth2/token";
 const PERMANENT_TOKEN_URL = "https://webapi.teamviewer.com/api/v1/OAuth2/accessToken";
 const REVOKE_URL = "https://webapi.teamviewer.com/api/v1/OAuth2/revoke";
@@ -125,6 +125,7 @@ export async function handleOAuthTool(
         response_type: "code",
         client_id: clientId,
         redirect_uri: redirectUri,
+        display: "popup",
         state,
         code_challenge: challenge,
         code_challenge_method: "S256",
