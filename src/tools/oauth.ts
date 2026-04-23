@@ -1,6 +1,7 @@
 import { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { createHash, randomBytes } from "crypto";
 import { loadTokens, saveTokens, clearTokens, TokenData } from "../token-store.js";
+import { startCallbackServer, stopCallbackServer, isCallbackServerRunning } from "../callback-server.js";
 
 const AUTHORIZE_URL = "https://account.teamviewer.com/oauth2/authorize";
 const TOKEN_URL = "https://webapi.teamviewer.com/api/v1/OAuth2/token";
@@ -107,6 +108,11 @@ export const oauthTools: Tool[] = [
     description: "Clears locally stored tokens. Use this to log out or switch accounts.",
     inputSchema: { type: "object", properties: {} },
   },
+  {
+    name: "tv_oauth_stop_callback_server",
+    description: "Stops the OAuth callback server if it is currently running.",
+    inputSchema: { type: "object", properties: {} },
+  },
 ];
 
 export async function handleOAuthTool(
@@ -115,7 +121,7 @@ export async function handleOAuthTool(
 ): Promise<unknown> {
   switch (name) {
     case "tv_oauth_get_auth_url": {
-      const { clientId, redirectUri } = getOAuthCredentials();
+      const { clientId, clientSecret, redirectUri } = getOAuthCredentials();
       const { verifier, challenge } = generatePKCE();
       const state = base64url(randomBytes(16));
 
@@ -132,14 +138,29 @@ export async function handleOAuthTool(
       });
       if (args.scope) params.set("scope", args.scope as string);
 
+      // Parse port from redirect URI (defaults to 443 for https)
+      const parsedUri = new URL(redirectUri);
+      const port = parsedUri.port ? parseInt(parsedUri.port, 10) : 443;
+
+      // Start the callback server in the background — it will auto-exchange
+      // the code and save the token when the browser redirects back
+      startCallbackServer(state, clientId, clientSecret, redirectUri, verifier, port)
+        .then(() => {
+          console.error("[teamviewer-mcp] OAuth flow completed successfully.");
+        })
+        .catch((err: Error) => {
+          console.error(`[teamviewer-mcp] OAuth callback error: ${err.message}`);
+        });
+
       return {
         authorization_url: `${AUTHORIZE_URL}?${params.toString()}`,
-        state,
         instructions:
           "1. Open the authorization_url in a browser.\n" +
-          "2. Log in to TeamViewer and grant access.\n" +
-          "3. Copy the 'code' query parameter from the redirect URL.\n" +
-          "4. Call tv_oauth_exchange_code with that code.",
+          "2. If prompted about an untrusted certificate for localhost, click 'Advanced' → 'Proceed to localhost'.\n" +
+          "3. Log in to TeamViewer and click Allow.\n" +
+          "4. The browser will show a success page and the token is saved automatically.\n" +
+          "5. Call tv_oauth_token_status to confirm authentication.",
+        callback_server: `Listening on ${redirectUri}`,
       };
     }
 
@@ -317,7 +338,10 @@ export async function handleOAuthTool(
       if (!tokens?.access_token && !envToken) {
         return {
           authenticated: false,
-          message: "No token found. Call tv_oauth_get_auth_url to authenticate.",
+          callback_server_running: isCallbackServerRunning(),
+          message: isCallbackServerRunning()
+            ? "Callback server is waiting for the browser redirect. Open the authorization URL to complete sign-in."
+            : "No token found. Call tv_oauth_get_auth_url to authenticate.",
         };
       }
 
@@ -326,6 +350,7 @@ export async function handleOAuthTool(
           authenticated: true,
           source: "TEAMVIEWER_API_TOKEN environment variable",
           token_type: "static",
+          callback_server_running: isCallbackServerRunning(),
         };
       }
 
@@ -337,12 +362,20 @@ export async function handleOAuthTool(
         expires_at: tokens!.expires_at ? new Date(tokens!.expires_at).toISOString() : "no expiry",
         expired: tokens!.expires_at ? Date.now() >= tokens!.expires_at - 60_000 : false,
         has_refresh_token: !!tokens!.refresh_token,
+        callback_server_running: isCallbackServerRunning(),
       };
     }
 
     case "tv_oauth_clear_tokens":
       clearTokens();
       return { message: "Local token store cleared." };
+
+    case "tv_oauth_stop_callback_server":
+      if (isCallbackServerRunning()) {
+        stopCallbackServer();
+        return { message: "Callback server stopped." };
+      }
+      return { message: "Callback server was not running." };
 
     default:
       throw new Error(`Unknown OAuth tool: ${name}`);
