@@ -7,7 +7,6 @@ const TOKEN_URL = "https://webapi.teamviewer.com/api/v1/OAuth2/token";
 const PERMANENT_TOKEN_URL = "https://webapi.teamviewer.com/api/v1/OAuth2/accessToken";
 const REVOKE_URL = "https://webapi.teamviewer.com/api/v1/OAuth2/revoke";
 
-// PKCE helpers
 function base64url(buf: Buffer): string {
   return buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
 }
@@ -18,6 +17,26 @@ function generatePKCE(): { verifier: string; challenge: string } {
   return { verifier, challenge };
 }
 
+function getOAuthCredentials(): { clientId: string; clientSecret: string; redirectUri: string } {
+  const clientId = process.env.TEAMVIEWER_CLIENT_ID;
+  const clientSecret = process.env.TEAMVIEWER_CLIENT_SECRET;
+  const redirectUri = process.env.TEAMVIEWER_REDIRECT_URI;
+
+  if (!clientId || !clientSecret || !redirectUri) {
+    const missing = [
+      !clientId && "TEAMVIEWER_CLIENT_ID",
+      !clientSecret && "TEAMVIEWER_CLIENT_SECRET",
+      !redirectUri && "TEAMVIEWER_REDIRECT_URI",
+    ].filter(Boolean).join(", ");
+    throw new Error(
+      `Missing required environment variables: ${missing}. ` +
+        "Create an OAuth2 app at https://login.teamviewer.com/nav#app/myapps and set these variables in your MCP server configuration."
+    );
+  }
+
+  return { clientId, clientSecret, redirectUri };
+}
+
 // In-memory PKCE verifier store (lives for the duration of the auth flow)
 const pkceStore = new Map<string, string>();
 
@@ -25,13 +44,12 @@ export const oauthTools: Tool[] = [
   {
     name: "tv_oauth_get_auth_url",
     description:
-      "Starts the OAuth2 authorization code flow. Returns a URL for the user to open in their browser. After authorizing, they will receive a code to pass to tv_oauth_exchange_code.",
+      "Starts the OAuth2 authorization code flow. Returns a URL for the user to open in their browser. " +
+      "Requires TEAMVIEWER_CLIENT_ID, TEAMVIEWER_CLIENT_SECRET, and TEAMVIEWER_REDIRECT_URI to be set. " +
+      "After authorizing, the user receives a code to pass to tv_oauth_exchange_code.",
     inputSchema: {
       type: "object",
-      required: ["client_id", "redirect_uri"],
       properties: {
-        client_id: { type: "string", description: "OAuth2 client ID from the TeamViewer Developer Portal" },
-        redirect_uri: { type: "string", description: "Redirect URI registered for the OAuth app (e.g. 'https://example.com/callback' or 'http://localhost:8080/callback')" },
         scope: {
           type: "string",
           description: "Space-separated OAuth scopes (e.g. 'UserInfo.View Computers.View'). Defaults to all scopes if omitted.",
@@ -42,29 +60,20 @@ export const oauthTools: Tool[] = [
   {
     name: "tv_oauth_exchange_code",
     description:
-      "Exchanges the authorization code received after the user authorizes the app for an access token. Saves the token locally for subsequent API calls.",
+      "Exchanges the authorization code (from the redirect URL after browser login) for an access token. " +
+      "Saves the token locally to ~/.teamviewer-mcp/tokens.json for subsequent API calls.",
     inputSchema: {
       type: "object",
-      required: ["code", "client_id", "client_secret", "redirect_uri"],
+      required: ["code"],
       properties: {
-        code: { type: "string", description: "Authorization code from the redirect URL query parameter" },
-        client_id: { type: "string", description: "OAuth2 client ID" },
-        client_secret: { type: "string", description: "OAuth2 client secret" },
-        redirect_uri: { type: "string", description: "Same redirect URI used in tv_oauth_get_auth_url" },
+        code: { type: "string", description: "Authorization code from the 'code' query parameter of the redirect URL" },
       },
     },
   },
   {
     name: "tv_oauth_refresh_token",
     description: "Uses the stored refresh token to obtain a new access token. Updates the local token store.",
-    inputSchema: {
-      type: "object",
-      required: ["client_id", "client_secret"],
-      properties: {
-        client_id: { type: "string", description: "OAuth2 client ID" },
-        client_secret: { type: "string", description: "OAuth2 client secret" },
-      },
-    },
+    inputSchema: { type: "object", properties: {} },
   },
   {
     name: "tv_oauth_revoke_token",
@@ -90,7 +99,7 @@ export const oauthTools: Tool[] = [
   },
   {
     name: "tv_oauth_token_status",
-    description: "Shows the current authentication status: whether a token is stored, its expiry, and scope.",
+    description: "Shows the current authentication status: token source, expiry, and scopes.",
     inputSchema: { type: "object", properties: {} },
   },
   {
@@ -106,26 +115,21 @@ export async function handleOAuthTool(
 ): Promise<unknown> {
   switch (name) {
     case "tv_oauth_get_auth_url": {
-      const { client_id, redirect_uri, scope } = args as {
-        client_id: string;
-        redirect_uri: string;
-        scope?: string;
-      };
+      const { clientId, redirectUri } = getOAuthCredentials();
       const { verifier, challenge } = generatePKCE();
       const state = base64url(randomBytes(16));
 
-      // Store verifier keyed by state so it can be retrieved at exchange time
       pkceStore.set(state, verifier);
 
       const params = new URLSearchParams({
         response_type: "code",
-        client_id,
-        redirect_uri,
+        client_id: clientId,
+        redirect_uri: redirectUri,
         state,
         code_challenge: challenge,
         code_challenge_method: "S256",
       });
-      if (scope) params.set("scope", scope);
+      if (args.scope) params.set("scope", args.scope as string);
 
       return {
         authorization_url: `${AUTHORIZE_URL}?${params.toString()}`,
@@ -134,19 +138,14 @@ export async function handleOAuthTool(
           "1. Open the authorization_url in a browser.\n" +
           "2. Log in to TeamViewer and grant access.\n" +
           "3. Copy the 'code' query parameter from the redirect URL.\n" +
-          "4. Call tv_oauth_exchange_code with the code, client_id, client_secret, and redirect_uri.",
+          "4. Call tv_oauth_exchange_code with that code.",
       };
     }
 
     case "tv_oauth_exchange_code": {
-      const { code, client_id, client_secret, redirect_uri } = args as {
-        code: string;
-        client_id: string;
-        client_secret: string;
-        redirect_uri: string;
-      };
+      const { clientId, clientSecret, redirectUri } = getOAuthCredentials();
+      const { code } = args as { code: string };
 
-      // Find PKCE verifier — use the most recently generated one if state wasn't tracked
       const verifier = pkceStore.size > 0
         ? [...pkceStore.values()].at(-1)!
         : undefined;
@@ -154,9 +153,9 @@ export async function handleOAuthTool(
       const body: Record<string, string> = {
         grant_type: "0",
         code,
-        redirect_uri,
-        client_id,
-        client_secret,
+        redirect_uri: redirectUri,
+        client_id: clientId,
+        client_secret: clientSecret,
       };
       if (verifier) body.code_verifier = verifier;
 
@@ -196,20 +195,17 @@ export async function handleOAuthTool(
         message: "Authentication successful. Token saved to ~/.teamviewer-mcp/tokens.json.",
         token_type: token.token_type,
         scope: token.scope,
-        expires_at: data.expires_at
-          ? new Date(data.expires_at).toISOString()
-          : "no expiry",
+        expires_at: data.expires_at ? new Date(data.expires_at).toISOString() : "no expiry",
         has_refresh_token: !!token.refresh_token,
       };
     }
 
     case "tv_oauth_refresh_token": {
+      const { clientId, clientSecret } = getOAuthCredentials();
       const tokens = loadTokens();
       if (!tokens?.refresh_token) {
         throw new Error("No refresh token found. Run tv_oauth_get_auth_url to re-authenticate.");
       }
-
-      const { client_id, client_secret } = args as { client_id: string; client_secret: string };
 
       const resp = await fetch(TOKEN_URL, {
         method: "POST",
@@ -217,8 +213,8 @@ export async function handleOAuthTool(
         body: JSON.stringify({
           grant_type: "1",
           refresh_token: tokens.refresh_token,
-          client_id,
-          client_secret,
+          client_id: clientId,
+          client_secret: clientSecret,
         }),
       });
 
@@ -271,7 +267,7 @@ export async function handleOAuthTool(
       const tokens = loadTokens();
       const envToken = process.env.TEAMVIEWER_API_TOKEN;
       const bearerToken = tokens?.access_token ?? envToken;
-      if (!bearerToken) throw new Error("No active token. Authenticate first.");
+      if (!bearerToken) throw new Error("No active token. Authenticate first with tv_oauth_get_auth_url.");
 
       const resp = await fetch(PERMANENT_TOKEN_URL, {
         method: "POST",
@@ -298,7 +294,7 @@ export async function handleOAuthTool(
       const tokens = loadTokens();
       const envToken = process.env.TEAMVIEWER_API_TOKEN;
       const bearerToken = tokens?.access_token ?? envToken;
-      if (!bearerToken) throw new Error("No active token. Authenticate first.");
+      if (!bearerToken) throw new Error("No active token. Authenticate first with tv_oauth_get_auth_url.");
 
       const resp = await fetch(PERMANENT_TOKEN_URL, {
         method: "DELETE",
@@ -318,11 +314,18 @@ export async function handleOAuthTool(
       const envToken = process.env.TEAMVIEWER_API_TOKEN;
 
       if (!tokens?.access_token && !envToken) {
-        return { authenticated: false, message: "No token found. Call tv_oauth_get_auth_url to authenticate." };
+        return {
+          authenticated: false,
+          message: "No token found. Call tv_oauth_get_auth_url to authenticate.",
+        };
       }
 
       if (envToken && !tokens?.access_token) {
-        return { authenticated: true, source: "TEAMVIEWER_API_TOKEN environment variable", token_type: "static" };
+        return {
+          authenticated: true,
+          source: "TEAMVIEWER_API_TOKEN environment variable",
+          token_type: "static",
+        };
       }
 
       return {

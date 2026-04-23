@@ -22,19 +22,34 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server that ex
 | Sessions | CRUD service case sessions |
 | User Management | CRUD users, TFA, effective permissions, role assignments |
 | User Roles + User Groups | Full role CRUD, assign/unassign to accounts & groups, user group management |
-| OAuth2 | Full authorization code flow with PKCE, token refresh, permanent tokens |
+| OAuth2 | Authorization code flow with PKCE, token refresh, permanent tokens |
 
 ---
 
 ## Requirements
 
 - [Node.js](https://nodejs.org) 18 or later
-- A TeamViewer account with API access
-- An OAuth2 app **or** a permanent API token from the [TeamViewer Developer Portal](https://login.teamviewer.com/nav#app/myapps)
+- A TeamViewer account
+- An OAuth2 app created in the [TeamViewer Developer Portal](https://login.teamviewer.com/nav#app/myapps)
 
 ---
 
-## Installation
+## Step 1 — Create an OAuth2 App
+
+Before running the server you must register an OAuth2 application in the TeamViewer Developer Portal. This provides the `client_id` and `client_secret` the server uses to exchange tokens on your behalf.
+
+1. Go to **[login.teamviewer.com/nav#app/myapps](https://login.teamviewer.com/nav#app/myapps)** and sign in.
+2. Click **Create app**.
+3. Fill in the required fields:
+   - **Name** — any descriptive name (e.g. `My MCP Server`)
+   - **Description** — optional
+   - **Redirect URI** — the URI TeamViewer will redirect to after the user authorizes. For local use `http://localhost` works (you only need to copy the `code` from the redirect URL — no server required).
+   - **Scopes** — select the permissions your app needs (see [Available Scopes](#available-scopes) below).
+4. Click **Save**. Copy the **Client ID** and **Client Secret** — you will need them in the next step.
+
+---
+
+## Step 2 — Install
 
 ```bash
 git clone https://github.com/NilsTv8/TV_MCP_public.git
@@ -45,73 +60,22 @@ npm run build
 
 ---
 
-## Authentication
+## Step 3 — Configure Environment Variables
 
-The server supports two authentication modes. It checks for credentials in this order:
+The server reads credentials from environment variables. Set these in your MCP client configuration (see [MCP Client Setup](#mcp-client-setup)):
 
-1. **`TEAMVIEWER_API_TOKEN` environment variable** — a static or permanent token
-2. **Stored OAuth token** — saved to `~/.teamviewer-mcp/tokens.json` via the OAuth flow
+| Variable | Required | Description |
+|---|---|---|
+| `TEAMVIEWER_CLIENT_ID` | Yes | OAuth2 client ID from the Developer Portal |
+| `TEAMVIEWER_CLIENT_SECRET` | Yes | OAuth2 client secret from the Developer Portal |
+| `TEAMVIEWER_REDIRECT_URI` | Yes | Redirect URI registered in the Developer Portal |
+| `TEAMVIEWER_API_TOKEN` | Optional | Static/permanent API token (bypasses OAuth entirely) |
 
-### Option A: Static API Token (simplest)
-
-Generate a permanent token in the [TeamViewer Developer Portal](https://login.teamviewer.com/nav#app/myapps) and pass it via the environment variable when configuring the MCP client (see [MCP Client Setup](#mcp-client-setup) below).
-
-### Option B: OAuth2 Authorization Code Flow
-
-Use this when you want delegated access or need to support multiple accounts. The flow uses PKCE and requires an OAuth2 app registered in the TeamViewer Developer Portal.
-
-**Step 1 — Get the authorization URL**
-
-Call the `tv_oauth_get_auth_url` tool:
-
-```
-client_id:    <your OAuth2 client ID>
-redirect_uri: http://localhost:8080/callback   (or any registered URI)
-scope:        UserInfo.View Computers.View     (optional)
-```
-
-The tool returns an authorization URL. Open it in your browser.
-
-**Step 2 — Authorize and copy the code**
-
-Log in to TeamViewer and grant access. You will be redirected to your `redirect_uri` with a `code` query parameter, e.g.:
-
-```
-http://localhost:8080/callback?code=ABC123&state=...
-```
-
-Copy the value of `code`.
-
-**Step 3 — Exchange the code for a token**
-
-Call `tv_oauth_exchange_code`:
-
-```
-code:          ABC123
-client_id:     <your client ID>
-client_secret: <your client secret>
-redirect_uri:  http://localhost:8080/callback
-```
-
-The access token and refresh token are saved to `~/.teamviewer-mcp/tokens.json` (mode `0600`). All subsequent API calls use this token automatically.
-
-**Refreshing tokens**
-
-Call `tv_oauth_refresh_token` with your `client_id` and `client_secret` to obtain a new access token using the stored refresh token. Expired tokens trigger an error with a clear message.
-
-**Other OAuth tools**
-
-| Tool | Description |
-|---|---|
-| `tv_oauth_token_status` | Show current auth state, expiry, and scopes |
-| `tv_oauth_revoke_token` | Revoke the active token and clear local storage |
-| `tv_oauth_create_permanent_token` | Create a non-expiring permanent API token |
-| `tv_oauth_delete_permanent_token` | Delete the permanent token |
-| `tv_oauth_clear_tokens` | Log out / remove stored tokens |
+> **Note:** If `TEAMVIEWER_API_TOKEN` is set, the server uses it directly and skips the OAuth flow. This is the simplest option if you already have a permanent token.
 
 ---
 
-## MCP Client Setup
+## Step 4 — MCP Client Setup
 
 ### Claude Desktop
 
@@ -120,8 +84,6 @@ Add the following to your `claude_desktop_config.json`:
 **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`  
 **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
 
-**With a static API token:**
-
 ```json
 {
   "mcpServers": {
@@ -129,41 +91,90 @@ Add the following to your `claude_desktop_config.json`:
       "command": "node",
       "args": ["/absolute/path/to/TV_MCP_public/dist/index.js"],
       "env": {
-        "TEAMVIEWER_API_TOKEN": "your-token-here"
+        "TEAMVIEWER_CLIENT_ID": "your-client-id",
+        "TEAMVIEWER_CLIENT_SECRET": "your-client-secret",
+        "TEAMVIEWER_REDIRECT_URI": "http://localhost"
       }
     }
   }
 }
 ```
 
-**With OAuth (token already obtained via the flow above):**
-
-```json
-{
-  "mcpServers": {
-    "teamviewer": {
-      "command": "node",
-      "args": ["/absolute/path/to/TV_MCP_public/dist/index.js"]
-    }
-  }
-}
-```
+Restart Claude Desktop after saving.
 
 ### Claude Code (CLI)
 
 ```bash
-claude mcp add teamviewer node /absolute/path/to/TV_MCP_public/dist/index.js
-```
-
-With a static token:
-
-```bash
-TEAMVIEWER_API_TOKEN=your-token claude mcp add teamviewer node /absolute/path/to/TV_MCP_public/dist/index.js
+claude mcp add teamviewer \
+  -e TEAMVIEWER_CLIENT_ID=your-client-id \
+  -e TEAMVIEWER_CLIENT_SECRET=your-client-secret \
+  -e TEAMVIEWER_REDIRECT_URI=http://localhost \
+  -- node /absolute/path/to/TV_MCP_public/dist/index.js
 ```
 
 ### Other MCP Clients
 
-The server communicates over **stdio** using the standard MCP protocol and is compatible with any MCP-capable client.
+The server communicates over **stdio** and is compatible with any MCP-capable client. Pass the three environment variables when spawning the process.
+
+---
+
+## Step 5 — Authenticate
+
+Once the server is connected, run the OAuth flow from within your AI assistant:
+
+**1. Get the authorization URL**
+
+Call `tv_oauth_get_auth_url` (optionally pass a `scope`). The tool returns an `authorization_url`.
+
+**2. Open the URL in your browser**
+
+Log in to TeamViewer and click **Allow**. You will be redirected to your `TEAMVIEWER_REDIRECT_URI` with a `code` parameter in the URL, e.g.:
+
+```
+http://localhost/?code=ABC123XYZ&state=...
+```
+
+**3. Exchange the code**
+
+Call `tv_oauth_exchange_code` and pass the `code` value. The access token and refresh token are saved to `~/.teamviewer-mcp/tokens.json` (permissions `0600`). All subsequent API calls use this token automatically.
+
+**Check status at any time** with `tv_oauth_token_status`.
+
+---
+
+## Authentication Reference
+
+| Tool | Description |
+|---|---|
+| `tv_oauth_get_auth_url` | Generates the authorization URL (PKCE) |
+| `tv_oauth_exchange_code` | Exchanges the auth code for tokens and saves them |
+| `tv_oauth_refresh_token` | Refreshes the access token using the stored refresh token |
+| `tv_oauth_revoke_token` | Revokes the active token and clears local storage |
+| `tv_oauth_create_permanent_token` | Creates a non-expiring permanent API token |
+| `tv_oauth_delete_permanent_token` | Deletes the permanent token |
+| `tv_oauth_token_status` | Shows current authentication state (source, expiry, scopes) |
+| `tv_oauth_clear_tokens` | Clears locally stored tokens (logout) |
+
+---
+
+## Available Scopes
+
+Select the scopes your app needs when creating it in the Developer Portal:
+
+| Scope | Access |
+|---|---|
+| `UserInfo.View` | Read account and user info |
+| `Computers.View` | Read device list |
+| `Computers.Edit` | Modify devices |
+| `SessionCode.Create` | Create service case sessions |
+| `Reports.View` | Read connection reports |
+| `ManagedGroups.View` | Read managed groups |
+| `ManagedGroups.Edit` | Modify managed groups |
+| `UserManagement.View` | Read users |
+| `UserManagement.Edit` | Create and modify users |
+| `EventLogging.View` | Read audit logs |
+
+For full access during development you can select all scopes.
 
 ---
 
@@ -171,7 +182,7 @@ The server communicates over **stdio** using the standard MCP protocol and is co
 
 ```bash
 # Run in development mode (no build step)
-TEAMVIEWER_API_TOKEN=your-token npm run dev
+TEAMVIEWER_CLIENT_ID=xxx TEAMVIEWER_CLIENT_SECRET=yyy TEAMVIEWER_REDIRECT_URI=http://localhost npm run dev
 
 # Rebuild after changes
 npm run build
@@ -357,18 +368,6 @@ npm run build
 | `tv_remove_user_group_members` | Removes users from a group |
 | `tv_remove_user_group_member` | Removes a single user from a group |
 | `tv_get_user_group_role` | Returns the role assigned to a group |
-
-### OAuth2
-| Tool | Description |
-|---|---|
-| `tv_oauth_get_auth_url` | Generates the authorization URL (PKCE) |
-| `tv_oauth_exchange_code` | Exchanges the auth code for tokens |
-| `tv_oauth_refresh_token` | Refreshes the access token |
-| `tv_oauth_revoke_token` | Revokes the active token |
-| `tv_oauth_create_permanent_token` | Creates a permanent API token |
-| `tv_oauth_delete_permanent_token` | Deletes the permanent token |
-| `tv_oauth_token_status` | Shows current authentication state |
-| `tv_oauth_clear_tokens` | Clears locally stored tokens |
 
 ---
 
