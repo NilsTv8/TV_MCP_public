@@ -7,6 +7,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 
 import { TeamViewerClient } from "./client.js";
+import { loadTokens, saveTokens, isExpired } from "./token-store.js";
 
 import { accountTools, handleAccountTool } from "./tools/account.js";
 import { companyTools, handleCompanyTool } from "./tools/company.js";
@@ -22,6 +23,7 @@ import { reportTools, handleReportTool } from "./tools/reports.js";
 import { sessionTools, handleSessionTool } from "./tools/sessions.js";
 import { userTools, handleUserTool } from "./tools/users.js";
 import { userRoleTools, handleUserRoleTool } from "./tools/user-roles.js";
+import { oauthTools, handleOAuthTool } from "./tools/oauth.js";
 
 const ALL_TOOLS = [
   ...accountTools,
@@ -38,6 +40,7 @@ const ALL_TOOLS = [
   ...sessionTools,
   ...userTools,
   ...userRoleTools,
+  ...oauthTools,
 ];
 
 const TOOL_HANDLERS: Record<
@@ -61,11 +64,25 @@ const TOOL_HANDLERS: Record<
 };
 
 function getClient(): TeamViewerClient {
-  const token = process.env.TEAMVIEWER_API_TOKEN;
-  if (!token) {
-    throw new Error("TEAMVIEWER_API_TOKEN environment variable is not set.");
+  // 1. Prefer env var (static token / permanent token)
+  const envToken = process.env.TEAMVIEWER_API_TOKEN;
+  if (envToken) return new TeamViewerClient(envToken);
+
+  // 2. Fall back to stored OAuth token
+  const stored = loadTokens();
+  if (!stored?.access_token) {
+    throw new Error(
+      "Not authenticated. Call tv_oauth_get_auth_url to start the OAuth flow, " +
+        "or set the TEAMVIEWER_API_TOKEN environment variable."
+    );
   }
-  return new TeamViewerClient(token);
+
+  // Warn if expired and no refresh token available
+  if (isExpired(stored) && !stored.refresh_token) {
+    throw new Error("Stored access token has expired and no refresh token is available. Re-authenticate with tv_oauth_get_auth_url.");
+  }
+
+  return new TeamViewerClient(stored.access_token);
 }
 
 const server = new Server(
@@ -80,6 +97,19 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args = {} } = request.params;
 
+  const typedArgs = args as Record<string, unknown>;
+
+  // OAuth tools manage their own auth state — no client needed
+  if (name.startsWith("tv_oauth_")) {
+    try {
+      const result = await handleOAuthTool(name, typedArgs);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { content: [{ type: "text", text: `Error: ${message}` }], isError: true };
+    }
+  }
+
   const handler = TOOL_HANDLERS[name];
   if (!handler) {
     return {
@@ -90,7 +120,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   try {
     const client = getClient();
-    const result = await handler(name, args as Record<string, unknown>, client);
+    const result = await handler(name, typedArgs, client);
     return {
       content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
     };

@@ -1,9 +1,13 @@
+export type RefreshFn = () => Promise<string>;
+
 export class TeamViewerClient {
   private readonly baseUrl = "https://webapi.teamviewer.com/api/v1";
-  private readonly token: string;
+  private token: string;
+  private readonly refreshFn?: RefreshFn;
 
-  constructor(token: string) {
+  constructor(token: string, refreshFn?: RefreshFn) {
     this.token = token;
+    this.refreshFn = refreshFn;
   }
 
   private async request<T>(
@@ -32,6 +36,11 @@ export class TeamViewerClient {
       headers,
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
+
+    if (response.status === 401 && this.refreshFn) {
+      this.token = await this.refreshFn();
+      return this.request<T>(method, path, body, query);
+    }
 
     if (!response.ok) {
       let errorMessage = `TeamViewer API error: ${response.status} ${response.statusText}`;
