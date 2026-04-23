@@ -108,8 +108,8 @@ export function startCallbackServer(
 
         // Exchange code for token
         try {
-          const body: Record<string, string> = {
-            grant_type: "0",
+          const body: Record<string, unknown> = {
+            grant_type: 0,
             code: String(code),
             redirect_uri: redirectUri,
             client_id: clientId,
@@ -124,8 +124,8 @@ export function startCallbackServer(
           });
 
           if (!tokenResp.ok) {
-            const err = await tokenResp.text();
-            throw new Error(`Token exchange failed: ${tokenResp.status} ${err}`);
+            const errBody = await tokenResp.text();
+            throw new Error(`${tokenResp.status} ${tokenResp.statusText} — ${errBody}`);
           }
 
           const token = (await tokenResp.json()) as {
@@ -156,7 +156,7 @@ export function startCallbackServer(
           resolve();
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
-          res.end(htmlPage("Token exchange failed", `<p>${msg}</p>`, false));
+          res.end(htmlPage("Token exchange failed", `<pre style="text-align:left;background:#f5f5f5;padding:12px;border-radius:4px;overflow:auto;font-size:13px;">${msg}</pre>`, false));
           clearTimeout(timeout);
           stopCallbackServer();
           reject(err instanceof Error ? err : new Error(msg));

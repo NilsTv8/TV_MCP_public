@@ -172,8 +172,8 @@ export async function handleOAuthTool(
         ? [...pkceStore.values()].at(-1)!
         : undefined;
 
-      const body: Record<string, string> = {
-        grant_type: "0",
+      const body: Record<string, unknown> = {
+        grant_type: 0,
         code,
         redirect_uri: redirectUri,
         client_id: clientId,
@@ -233,7 +233,7 @@ export async function handleOAuthTool(
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          grant_type: "1",
+          grant_type: 1,
           refresh_token: tokens.refresh_token,
           client_id: clientId,
           client_secret: clientSecret,
