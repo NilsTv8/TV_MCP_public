@@ -24,6 +24,7 @@ import { sessionTools, handleSessionTool } from "./tools/sessions.js";
 import { userTools, handleUserTool } from "./tools/users.js";
 import { userRoleTools, handleUserRoleTool } from "./tools/user-roles.js";
 import { oauthTools, handleOAuthTool } from "./tools/oauth.js";
+import { remoteControlTools, handleRemoteControlTool } from "./tools/remote-control.js";
 
 const ALL_TOOLS = [
   ...accountTools,
@@ -41,6 +42,7 @@ const ALL_TOOLS = [
   ...userTools,
   ...userRoleTools,
   ...oauthTools,
+  ...remoteControlTools,
 ];
 
 const TOOL_HANDLERS: Record<
@@ -98,6 +100,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args = {} } = request.params;
 
   const typedArgs = args as Record<string, unknown>;
+
+  // Remote control — opens a local URL, no API client needed
+  if (name === "tv_connect_device") {
+    try {
+      const result = await handleRemoteControlTool(name, typedArgs);
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { content: [{ type: "text", text: `Error: ${message}` }], isError: true };
+    }
+  }
 
   // OAuth tools manage their own auth state — no client needed
   if (name.startsWith("tv_oauth_")) {
