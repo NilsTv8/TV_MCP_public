@@ -1,4 +1,5 @@
 import { Tool } from "@modelcontextprotocol/sdk/types.js";
+import { validateId } from "../utils.js";
 import { TeamViewerClient } from "../client.js";
 
 export const deviceGroupTools: Tool[] = [
@@ -112,18 +113,20 @@ export async function handleDeviceGroupTool(
     }
 
     case "tv_get_device_group":
-      return client.get(`/groups/${args.group_id}`);
+      return client.get(`/groups/${validateId(args.group_id, "group_id")}`);
 
     case "tv_update_device_group": {
       const { group_id, ...body } = args as { group_id: string } & Record<string, unknown>;
+      validateId(group_id, "group_id");
       return client.put(`/groups/${group_id}`, body);
     }
 
     case "tv_delete_device_group":
-      return client.delete(`/groups/${args.group_id}`);
+      return client.delete(`/groups/${validateId(args.group_id, "group_id")}`);
 
     case "tv_share_device_group": {
       const { group_id, users } = args as { group_id: string; users: string[] };
+      validateId(group_id, "group_id");
       return client.post(`/groups/${group_id}/share_group`, { users });
     }
 

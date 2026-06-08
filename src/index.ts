@@ -1,6 +1,8 @@
 #!/usr/bin/env node
+import { createServer, IncomingMessage, ServerResponse } from "node:http";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -146,10 +148,70 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 });
 
-async function main() {
-  const transport = new StdioServerTransport();
+function readBody(req: IncomingMessage): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    let data = "";
+    req.on("data", (chunk) => { data += chunk; });
+    req.on("end", () => {
+      try { resolve(data ? JSON.parse(data) : undefined); }
+      catch { reject(new Error("Invalid JSON")); }
+    });
+    req.on("error", reject);
+  });
+}
+
+async function startHttp() {
+  const port = parseInt(process.env.HTTP_PORT ?? process.env.PORT ?? "3000", 10);
+  const bearerSecret = process.env.MCP_BEARER_TOKEN;
+  if (!bearerSecret) {
+    throw new Error(
+      "MCP_BEARER_TOKEN environment variable must be set when running in HTTP mode. " +
+        "Set it to a long random secret and configure the same value in your MCP client."
+    );
+  }
+
+  const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+
   await server.connect(transport);
-  console.error("TeamViewer MCP server running on stdio");
+
+  const httpServer = createServer(async (req: IncomingMessage, res: ServerResponse) => {
+    const authHeader = req.headers["authorization"] ?? "";
+    if (!authHeader.startsWith("Bearer ") || authHeader.slice(7) !== bearerSecret) {
+      res.writeHead(401, { "WWW-Authenticate": 'Bearer realm="teamviewer-mcp"' }).end("Unauthorized");
+      return;
+    }
+
+    const url = new URL(req.url ?? "/", `http://localhost`);
+    if (url.pathname !== "/mcp") {
+      res.writeHead(404).end("Not found");
+      return;
+    }
+    try {
+      const body = req.method === "POST" ? await readBody(req) : undefined;
+      await transport.handleRequest(req, res, body);
+    } catch (err) {
+      if (!res.headersSent) res.writeHead(500).end("Internal server error");
+    }
+  });
+
+  await new Promise<void>((resolve) => {
+    httpServer.listen(port, "0.0.0.0", () => {
+      console.error(`TeamViewer MCP server running on HTTP port ${port}`);
+      resolve();
+    });
+  });
+}
+
+async function main() {
+  const useHttp = process.argv.includes("--http") || process.env.HTTP_PORT || process.env.PORT;
+
+  if (useHttp) {
+    await startHttp();
+  } else {
+    const transport = new StdioServerTransport();
+    await server.connect(transport);
+    console.error("TeamViewer MCP server running on stdio");
+  }
 }
 
 main().catch((error) => {

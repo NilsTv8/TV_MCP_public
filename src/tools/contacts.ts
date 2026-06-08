@@ -1,4 +1,5 @@
 import { Tool } from "@modelcontextprotocol/sdk/types.js";
+import { validateId } from "../utils.js";
 import { TeamViewerClient } from "../client.js";
 
 export const contactTools: Tool[] = [
@@ -62,7 +63,7 @@ export async function handleContactTool(
       return client.get("/contacts", { online_state: args.online_state as string | undefined });
 
     case "tv_get_contact":
-      return client.get(`/contacts/${args.contact_id}`);
+      return client.get(`/contacts/${validateId(args.contact_id, "contact_id")}`);
 
     case "tv_create_contact": {
       const { contact_id: _id, ...body } = args as { contact_id?: string } & Record<string, unknown>;
@@ -70,7 +71,7 @@ export async function handleContactTool(
     }
 
     case "tv_delete_contact":
-      return client.delete(`/contacts/${args.contact_id}`);
+      return client.delete(`/contacts/${validateId(args.contact_id, "contact_id")}`);
 
     default:
       throw new Error(`Unknown contact tool: ${name}`);

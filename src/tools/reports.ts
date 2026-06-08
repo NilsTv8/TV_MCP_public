@@ -1,4 +1,5 @@
 import { Tool } from "@modelcontextprotocol/sdk/types.js";
+import { validateId } from "../utils.js";
 import { TeamViewerClient } from "../client.js";
 
 export const reportTools: Tool[] = [
@@ -131,30 +132,31 @@ export async function handleReportTool(
       return client.get("/reports/connections", args as Record<string, string | number | boolean | undefined>);
 
     case "tv_get_connection_report":
-      return client.get(`/reports/connections/${args.connection_id}`);
+      return client.get(`/reports/connections/${validateId(args.connection_id, "connection_id")}`);
 
     case "tv_update_connection_report": {
       const { connection_id, ...body } = args as { connection_id: string } & Record<string, unknown>;
+      validateId(connection_id, "connection_id");
       return client.put(`/reports/connections/${connection_id}`, body);
     }
 
     case "tv_delete_connection_report":
-      return client.delete(`/reports/connections/${args.connection_id}`);
+      return client.delete(`/reports/connections/${validateId(args.connection_id, "connection_id")}`);
 
     case "tv_get_connection_ai_summary":
-      return client.get(`/reports/connections/${args.connection_id}/ai-summary`);
+      return client.get(`/reports/connections/${validateId(args.connection_id, "connection_id")}/ai-summary`);
 
     case "tv_get_connection_chat_transcript":
-      return client.get(`/reports/connections/${args.connection_id}/chat-transcript`);
+      return client.get(`/reports/connections/${validateId(args.connection_id, "connection_id")}/chat-transcript`);
 
     case "tv_get_connection_voice_transcript":
-      return client.get(`/reports/connections/${args.connection_id}/voice-transcript`);
+      return client.get(`/reports/connections/${validateId(args.connection_id, "connection_id")}/voice-transcript`);
 
     case "tv_list_connection_screenshots":
-      return client.get(`/reports/connections/${args.connection_id}/screenshots`);
+      return client.get(`/reports/connections/${validateId(args.connection_id, "connection_id")}/screenshots`);
 
     case "tv_get_connection_screenshot":
-      return client.get(`/reports/connections/${args.connection_id}/${args.screenshot_id}/screenshot`);
+      return client.get(`/reports/connections/${validateId(args.connection_id, "connection_id")}/${validateId(args.screenshot_id, "screenshot_id")}/screenshot`);
 
     case "tv_list_device_reports":
       return client.get("/reports/devices", args as Record<string, string | number | boolean | undefined>);

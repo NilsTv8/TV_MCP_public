@@ -1,4 +1,5 @@
 import { Tool } from "@modelcontextprotocol/sdk/types.js";
+import { validateId } from "../utils.js";
 import { TeamViewerClient } from "../client.js";
 
 export const managedGroupTools: Tool[] = [
@@ -144,7 +145,7 @@ export async function handleManagedGroupTool(
       });
 
     case "tv_get_managed_group":
-      return client.get(`/managed/groups/${args.group_id}`);
+      return client.get(`/managed/groups/${validateId(args.group_id, "group_id")}`);
 
     case "tv_create_managed_group": {
       const { group_id: _id, ...body } = args as { group_id?: string } & Record<string, unknown>;
@@ -153,14 +154,15 @@ export async function handleManagedGroupTool(
 
     case "tv_update_managed_group": {
       const { group_id, ...body } = args as { group_id: string } & Record<string, unknown>;
+      validateId(group_id, "group_id");
       return client.put(`/managed/groups/${group_id}`, body);
     }
 
     case "tv_delete_managed_group":
-      return client.delete(`/managed/groups/${args.group_id}`);
+      return client.delete(`/managed/groups/${validateId(args.group_id, "group_id")}`);
 
     case "tv_list_group_managers":
-      return client.get(`/managed/groups/${args.group_id}/managers`);
+      return client.get(`/managed/groups/${validateId(args.group_id, "group_id")}/managers`);
 
     case "tv_add_group_managers": {
       const { group_id, ...body } = args as { group_id: string } & Record<string, unknown>;

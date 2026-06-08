@@ -1,4 +1,5 @@
 import { Tool } from "@modelcontextprotocol/sdk/types.js";
+import { validateId } from "../utils.js";
 import { TeamViewerClient } from "../client.js";
 
 export const userTools: Tool[] = [
@@ -148,26 +149,27 @@ export async function handleUserTool(
     }
 
     case "tv_get_user":
-      return client.get(`/users/${args.user_id}`);
+      return client.get(`/users/${validateId(args.user_id, "user_id")}`);
 
     case "tv_update_user": {
       const { user_id, ...body } = args as { user_id: string } & Record<string, unknown>;
+      validateId(user_id, "user_id");
       return client.put(`/users/${user_id}`, body);
     }
 
     case "tv_delete_user":
-      return client.delete(`/users/${args.user_id}`, undefined, {
+      return client.delete(`/users/${validateId(args.user_id, "user_id")}`, undefined, {
         isPermanentDelete: args.is_permanent_delete as boolean | undefined,
       });
 
     case "tv_deactivate_user_tfa":
-      return client.delete(`/users/${args.user_id}/tfa`);
+      return client.delete(`/users/${validateId(args.user_id, "user_id")}/tfa`);
 
     case "tv_get_user_effective_permissions":
       return client.get("/users/effectivepermissions");
 
     case "tv_get_user_roles":
-      return client.get(`/users/${args.user_id}/userroles`, {
+      return client.get(`/users/${validateId(args.user_id, "user_id")}/userroles`, {
         paginationToken: args.pagination_token as string | undefined,
       });
 

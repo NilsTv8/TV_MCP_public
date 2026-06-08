@@ -1,4 +1,5 @@
 import { Tool } from "@modelcontextprotocol/sdk/types.js";
+import { validateId } from "../utils.js";
 import { TeamViewerClient } from "../client.js";
 
 export const managedDeviceTools: Tool[] = [
@@ -189,28 +190,30 @@ export async function handleManagedDeviceTool(
       return client.get("/managed/devices/assignment-data");
 
     case "tv_get_managed_device":
-      return client.get(`/managed/devices/${args.device_id}`);
+      return client.get(`/managed/devices/${validateId(args.device_id, "device_id")}`);
 
     case "tv_update_managed_device": {
       const { device_id, ...body } = args as { device_id: string } & Record<string, unknown>;
+      validateId(device_id, "device_id");
       return client.put(`/managed/devices/${device_id}`, body);
     }
 
     case "tv_update_managed_device_description": {
       const { device_id, description } = args as { device_id: string; description: string };
+      validateId(device_id, "device_id");
       return client.put(`/managed/devices/${device_id}/description`, {
         deviceDescription: description,
       });
     }
 
     case "tv_delete_managed_device":
-      return client.delete(`/managed/devices/${args.device_id}`);
+      return client.delete(`/managed/devices/${validateId(args.device_id, "device_id")}`);
 
     case "tv_remove_managed_device_policy":
-      return client.put(`/managed/devices/${args.device_id}/policy/remove`, {});
+      return client.put(`/managed/devices/${validateId(args.device_id, "device_id")}/policy/remove`, {});
 
     case "tv_get_managed_device_groups":
-      return client.get(`/managed/devices/${args.device_id}/groups`);
+      return client.get(`/managed/devices/${validateId(args.device_id, "device_id")}/groups`);
 
     case "tv_update_managed_device_groups": {
       const { device_id, added_chain_ids, removed_chain_ids } = args as {
@@ -218,6 +221,7 @@ export async function handleManagedDeviceTool(
         added_chain_ids?: string[];
         removed_chain_ids?: string[];
       };
+      validateId(device_id, "device_id");
       return client.put(`/managed/devices/${device_id}/groups`, {
         AddedChainIds: added_chain_ids,
         RemovedChainIds: removed_chain_ids,
@@ -225,15 +229,16 @@ export async function handleManagedDeviceTool(
     }
 
     case "tv_list_managed_device_managers":
-      return client.get(`/managed/devices/${args.device_id}/managers`);
+      return client.get(`/managed/devices/${validateId(args.device_id, "device_id")}/managers`);
 
     case "tv_add_managed_device_managers": {
       const { device_id, managers } = args as { device_id: string; managers: unknown[] };
+      validateId(device_id, "device_id");
       return client.post(`/managed/devices/${device_id}/managers`, managers);
     }
 
     case "tv_remove_managed_device_manager":
-      return client.delete(`/managed/devices/${args.device_id}/managers/${args.manager_id}`);
+      return client.delete(`/managed/devices/${validateId(args.device_id, "device_id")}/managers/${validateId(args.manager_id, "manager_id")}`);
 
     default:
       throw new Error(`Unknown managed device tool: ${name}`);

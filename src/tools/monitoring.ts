@@ -1,4 +1,5 @@
 import { Tool } from "@modelcontextprotocol/sdk/types.js";
+import { validateId } from "../utils.js";
 import { TeamViewerClient } from "../client.js";
 
 export const monitoringTools: Tool[] = [
@@ -97,13 +98,13 @@ export async function handleMonitoringTool(
       });
 
     case "tv_get_device_hardware_info":
-      return client.get(`/monitoring/devices/${args.device_id}/hardware`);
+      return client.get(`/monitoring/devices/${validateId(args.device_id, "device_id")}/hardware`);
 
     case "tv_get_device_system_info":
-      return client.get(`/monitoring/devices/${args.device_id}/information`);
+      return client.get(`/monitoring/devices/${validateId(args.device_id, "device_id")}/information`);
 
     case "tv_get_device_software_info":
-      return client.get(`/monitoring/devices/${args.device_id}/software`);
+      return client.get(`/monitoring/devices/${validateId(args.device_id, "device_id")}/software`);
 
     default:
       throw new Error(`Unknown monitoring tool: ${name}`);

@@ -1,4 +1,5 @@
 import { Tool } from "@modelcontextprotocol/sdk/types.js";
+import { validateId } from "../utils.js";
 import { TeamViewerClient } from "../client.js";
 
 export const policyTools: Tool[] = [
@@ -144,21 +145,22 @@ export async function handlePolicyTool(
     }
 
     case "tv_get_teamviewer_policy":
-      return client.get(`/TeamViewerPolicies/${args.policy_id}`);
+      return client.get(`/TeamViewerPolicies/${validateId(args.policy_id, "policy_id")}`);
 
     case "tv_update_teamviewer_policy": {
       const { policy_id, ...body } = args as { policy_id: string } & Record<string, unknown>;
+      validateId(policy_id, "policy_id");
       return client.put(`/TeamViewerPolicies/${policy_id}`, body);
     }
 
     case "tv_delete_teamviewer_policy":
-      return client.delete(`/TeamViewerPolicies/${args.policy_id}`);
+      return client.delete(`/TeamViewerPolicies/${validateId(args.policy_id, "policy_id")}`);
 
     case "tv_list_monitoring_policies":
       return client.get("/Monitoring/Policy");
 
     case "tv_get_monitoring_policy":
-      return client.get(`/Monitoring/Policy/${args.policy_id}`);
+      return client.get(`/Monitoring/Policy/${validateId(args.policy_id, "policy_id")}`);
 
     case "tv_assign_monitoring_policy":
       return client.post("/Monitoring/Policy/Assign", args.assignments);
@@ -167,7 +169,7 @@ export async function handlePolicyTool(
       return client.get("/PatchManagement/Policy");
 
     case "tv_get_patch_management_policy":
-      return client.get(`/PatchManagement/Policy/${args.policy_id}`);
+      return client.get(`/PatchManagement/Policy/${validateId(args.policy_id, "policy_id")}`);
 
     case "tv_assign_patch_management_policy":
       return client.post("/PatchManagement/Policy/Assign", args.assignments);

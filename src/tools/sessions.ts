@@ -1,4 +1,5 @@
 import { Tool } from "@modelcontextprotocol/sdk/types.js";
+import { validateId } from "../utils.js";
 import { TeamViewerClient } from "../client.js";
 
 export const sessionTools: Tool[] = [
@@ -89,7 +90,7 @@ export async function handleSessionTool(
       });
 
     case "tv_get_session":
-      return client.get(`/sessions/${args.session_code}`);
+      return client.get(`/sessions/${validateId(args.session_code, "session_code")}`);
 
     case "tv_create_session": {
       const { session_code: _code, ...body } = args as { session_code?: string } & Record<string, unknown>;
@@ -98,11 +99,12 @@ export async function handleSessionTool(
 
     case "tv_update_session": {
       const { session_code, ...body } = args as { session_code: string } & Record<string, unknown>;
+      validateId(session_code, "session_code");
       return client.put(`/sessions/${session_code}`, body);
     }
 
     case "tv_delete_session":
-      return client.delete(`/sessions/${args.session_code}`);
+      return client.delete(`/sessions/${validateId(args.session_code, "session_code")}`);
 
     default:
       throw new Error(`Unknown session tool: ${name}`);

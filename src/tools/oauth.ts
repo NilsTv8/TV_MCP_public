@@ -1,5 +1,8 @@
 import { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { randomBytes } from "crypto";
+import { randomBytes, createHash } from "crypto";
+import { writeFileSync } from "fs";
+import { homedir } from "os";
+import { join } from "path";
 import { loadTokens, saveTokens, clearTokens, TokenData } from "../token-store.js";
 import { startCallbackServer, stopCallbackServer, isCallbackServerRunning } from "../callback-server.js";
 
@@ -114,6 +117,8 @@ export async function handleOAuthTool(
     case "tv_oauth_get_auth_url": {
       const { clientId, clientSecret, redirectUri } = getOAuthCredentials();
       const state = base64url(randomBytes(16));
+      const codeVerifier = base64url(randomBytes(32));
+      const codeChallenge = base64url(createHash("sha256").update(codeVerifier).digest());
 
       const params = new URLSearchParams({
         response_type: "code",
@@ -121,16 +126,15 @@ export async function handleOAuthTool(
         redirect_uri: redirectUri,
         display: "popup",
         state,
+        code_challenge: codeChallenge,
+        code_challenge_method: "S256",
       });
       if (args.scope) params.set("scope", args.scope as string);
 
-      // Parse port from redirect URI (defaults to 443 for https)
       const parsedUri = new URL(redirectUri);
-      const port = parsedUri.port ? parseInt(parsedUri.port, 10) : 443;
+      const port = parsedUri.port ? parseInt(parsedUri.port, 10) : 8080;
 
-      // Start the callback server in the background — it will auto-exchange
-      // the code and save the token when the browser redirects back
-      startCallbackServer(state, clientId, clientSecret, redirectUri, port)
+      startCallbackServer(state, clientId, clientSecret, redirectUri, port, codeVerifier)
         .then(() => {
           console.error("[teamviewer-mcp] OAuth flow completed successfully.");
         })
@@ -142,10 +146,9 @@ export async function handleOAuthTool(
         authorization_url: `${AUTHORIZE_URL}?${params.toString()}`,
         instructions:
           "1. Open the authorization_url in a browser.\n" +
-          "2. If prompted about an untrusted certificate for localhost, click 'Advanced' → 'Proceed to localhost'.\n" +
-          "3. Log in to TeamViewer and click Allow.\n" +
-          "4. The browser will show a success page and the token is saved automatically.\n" +
-          "5. Call tv_oauth_token_status to confirm authentication.",
+          "2. Log in to TeamViewer and click Allow.\n" +
+          "3. The browser will show a success page and the token is saved automatically.\n" +
+          "4. Call tv_oauth_token_status to confirm authentication.",
         callback_server: `Listening on ${redirectUri}`,
       };
     }
@@ -283,9 +286,11 @@ export async function handleOAuthTool(
       }
 
       const result = (await resp.json()) as { AccessToken: string };
+      const tokenPath = join(homedir(), ".teamviewer-mcp", "permanent-token.txt");
+      writeFileSync(tokenPath, result.AccessToken, { mode: 0o600 });
+
       return {
-        message: "Permanent access token created. Store it securely — it will not be shown again.",
-        access_token: result.AccessToken,
+        message: `Permanent access token created and saved to ${tokenPath}. Copy it from there — it cannot be retrieved again.`,
       };
     }
 

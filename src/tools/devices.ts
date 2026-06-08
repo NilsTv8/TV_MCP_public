@@ -1,4 +1,5 @@
 import { Tool } from "@modelcontextprotocol/sdk/types.js";
+import { validateId } from "../utils.js";
 import { TeamViewerClient } from "../client.js";
 
 export const deviceTools: Tool[] = [
@@ -164,7 +165,7 @@ export async function handleDeviceTool(
     }
 
     case "tv_get_device":
-      return client.get(`/devices/${args.device_id}`);
+      return client.get(`/devices/${validateId(args.device_id, "device_id")}`);
 
     case "tv_create_device": {
       const { device_id: _id, ...body } = args as { device_id?: string } & Record<string, unknown>;
@@ -173,11 +174,12 @@ export async function handleDeviceTool(
 
     case "tv_update_device": {
       const { device_id, ...body } = args as { device_id: string } & Record<string, unknown>;
+      validateId(device_id, "device_id");
       return client.put(`/devices/${device_id}`, body);
     }
 
     case "tv_delete_device":
-      return client.delete(`/devices/${args.device_id}`);
+      return client.delete(`/devices/${validateId(args.device_id, "device_id")}`);
 
     case "tv_assign_device": {
       const { device_id: _id, ...body } = args as { device_id?: string } & Record<string, unknown>;
@@ -185,23 +187,26 @@ export async function handleDeviceTool(
     }
 
     case "tv_list_iot_sensors":
-      return client.get(`/devices/${args.device_id}/iot/sensors`);
+      return client.get(`/devices/${validateId(args.device_id, "device_id")}/iot/sensors`);
 
     case "tv_create_iot_sensor": {
       const { device_id, ...body } = args as { device_id: string } & Record<string, unknown>;
+      validateId(device_id, "device_id");
       return client.post(`/devices/${device_id}/iot/sensors`, body);
     }
 
     case "tv_get_iot_sensor":
-      return client.get(`/devices/${args.device_id}/iot/sensors/${args.sensor_id}`);
+      return client.get(`/devices/${validateId(args.device_id, "device_id")}/iot/sensors/${validateId(args.sensor_id, "sensor_id")}`);
 
     case "tv_update_iot_sensor": {
       const { device_id, sensor_id, ...body } = args as { device_id: string; sensor_id: string } & Record<string, unknown>;
+      validateId(device_id, "device_id");
+      validateId(sensor_id, "sensor_id");
       return client.put(`/devices/${device_id}/iot/sensors/${sensor_id}`, body);
     }
 
     case "tv_delete_iot_sensor":
-      return client.delete(`/devices/${args.device_id}/iot/sensors/${args.sensor_id}`);
+      return client.delete(`/devices/${validateId(args.device_id, "device_id")}/iot/sensors/${validateId(args.sensor_id, "sensor_id")}`);
 
     default:
       throw new Error(`Unknown device tool: ${name}`);

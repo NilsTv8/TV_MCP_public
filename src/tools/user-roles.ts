@@ -1,4 +1,5 @@
 import { Tool } from "@modelcontextprotocol/sdk/types.js";
+import { validateId } from "../utils.js";
 import { TeamViewerClient } from "../client.js";
 
 export const userRoleTools: Tool[] = [
@@ -320,7 +321,7 @@ export async function handleUserRoleTool(
       return client.get("/userroles/predefined");
 
     case "tv_set_predefined_user_role":
-      return client.put(`/userroles/${args.user_role_id}/predefined`, {});
+      return client.put(`/userroles/${validateId(args.user_role_id, "user_role_id")}/predefined`, {});
 
     case "tv_clear_predefined_user_role":
       return client.delete("/userroles/predefined");
@@ -372,31 +373,31 @@ export async function handleUserRoleTool(
       return client.post("/usergroups", { name: args.name });
 
     case "tv_get_user_group":
-      return client.get(`/usergroups/${args.group_id}`);
+      return client.get(`/usergroups/${validateId(args.group_id, "group_id")}`);
 
     case "tv_update_user_group":
-      return client.put(`/usergroups/${args.group_id}`, { name: args.name });
+      return client.put(`/usergroups/${validateId(args.group_id, "group_id")}`, { name: args.name });
 
     case "tv_delete_user_group":
-      return client.delete(`/usergroups/${args.group_id}`);
+      return client.delete(`/usergroups/${validateId(args.group_id, "group_id")}`);
 
     case "tv_list_user_group_members":
-      return client.get(`/usergroups/${args.group_id}/members`, {
+      return client.get(`/usergroups/${validateId(args.group_id, "group_id")}/members`, {
         paginationToken: args.pagination_token as string | undefined,
         limit: args.limit as number | undefined,
       });
 
     case "tv_add_user_group_members":
-      return client.post(`/usergroups/${args.group_id}/members`, args.account_ids);
+      return client.post(`/usergroups/${validateId(args.group_id, "group_id")}/members`, args.account_ids);
 
     case "tv_remove_user_group_members":
-      return client.delete(`/usergroups/${args.group_id}/members`, args.account_ids);
+      return client.delete(`/usergroups/${validateId(args.group_id, "group_id")}/members`, args.account_ids);
 
     case "tv_remove_user_group_member":
-      return client.delete(`/usergroups/${args.group_id}/members/${args.account_id}`);
+      return client.delete(`/usergroups/${validateId(args.group_id, "group_id")}/members/${validateId(args.account_id, "account_id")}`);
 
     case "tv_get_user_group_role":
-      return client.get(`/usergroups/${args.group_id}/userroles`);
+      return client.get(`/usergroups/${validateId(args.group_id, "group_id")}/userroles`);
 
     default:
       throw new Error(`Unknown user role tool: ${name}`);
