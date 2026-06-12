@@ -1,10 +1,10 @@
 # TeamViewer MCP Server
 
-A [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server that exposes the [TeamViewer Web API](https://webapi.teamviewer.com/api/v1/docs) as tools for AI assistants such as Claude.
+A [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server that exposes the [TeamViewer Web API](https://webapi.teamviewer.com/api/v1/docs) as tools for AI assistants such as Claude and Microsoft 365 Copilot.
 
 ## Features
 
-125 tools across 15 functional groups:
+127 tools across 16 functional groups:
 
 | Group | Tools |
 |---|---|
@@ -22,7 +22,19 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server that ex
 | Sessions | CRUD service case sessions |
 | User Management | CRUD users, TFA, effective permissions, role assignments |
 | User Roles + User Groups | Full role CRUD, assign/unassign to accounts & groups, user group management |
-| OAuth2 | Authorization code flow with PKCE, token refresh, permanent tokens |
+| OAuth2 | Authorization code flow, token refresh, permanent tokens |
+| Remote Control | One-click connect to devices |
+
+---
+
+## Transports
+
+The server supports two transports:
+
+| Transport | Use case |
+|---|---|
+| **stdio** | Claude Desktop / Claude Code — the client spawns the server as a local process |
+| **HTTP** | M365 Copilot / remote clients — the server runs as an HTTP service on a reachable URL |
 
 ---
 
@@ -30,22 +42,25 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server that ex
 
 - [Node.js](https://nodejs.org) 18 or later
 - A TeamViewer account
-- An OAuth2 app created in the [TeamViewer Developer Portal](https://login.teamviewer.com/nav#app/myapps)
+- A TeamViewer API token (script token or OAuth2)
 
 ---
 
-## Step 1 — Create an OAuth2 App
+## Step 1 — Get a TeamViewer API Token
 
-Before running the server you must register an OAuth2 application in the TeamViewer Developer Portal. This provides the `client_id` and `client_secret` the server uses to exchange tokens on your behalf.
+**Option A — Script token (recommended, simplest)**
+
+1. Go to **[login.teamviewer.com](https://login.teamviewer.com)** and sign in.
+2. Click your avatar → **Edit profile** → **Apps** → **Create script token**.
+3. Give it a name and select the scopes you need (see [Available Scopes](#available-scopes)).
+4. Copy the token — you will use it as `TEAMVIEWER_API_TOKEN`.
+
+**Option B — OAuth2 app (for multi-user / delegated access)**
 
 1. Go to **[login.teamviewer.com/nav#app/myapps](https://login.teamviewer.com/nav#app/myapps)** and sign in.
-2. Click **Create app**.
-3. Fill in the required fields:
-   - **Name** — any descriptive name (e.g. `My MCP Server`)
-   - **Description** — optional
-   - **Redirect URI** — the URI TeamViewer will redirect to after the user authorizes. For local use `http://localhost` works (you only need to copy the `code` from the redirect URL — no server required). The authorization page opens as a popup.
-   - **Scopes** — select the permissions your app needs (see [Available Scopes](#available-scopes) below).
-4. Click **Save**. Copy the **Client ID** and **Client Secret** — you will need them in the next step.
+2. Click **Create app**, fill in a name and redirect URI, and select scopes.
+3. Copy the **Client ID** and **Client Secret**.
+4. After connecting the server, run the OAuth flow from your AI assistant (see [OAuth2 Flow](#oauth2-flow)).
 
 ---
 
@@ -60,24 +75,9 @@ npm run build
 
 ---
 
-## Step 3 — Configure Environment Variables
+## Step 3 — Connect to an AI Client
 
-The server reads credentials from environment variables. Set these in your MCP client configuration (see [MCP Client Setup](#mcp-client-setup)):
-
-| Variable | Required | Description |
-|---|---|---|
-| `TEAMVIEWER_CLIENT_ID` | Yes | OAuth2 client ID from the Developer Portal |
-| `TEAMVIEWER_CLIENT_SECRET` | Yes | OAuth2 client secret from the Developer Portal |
-| `TEAMVIEWER_REDIRECT_URI` | Yes | Redirect URI registered in the Developer Portal |
-| `TEAMVIEWER_API_TOKEN` | Optional | Static/permanent API token (bypasses OAuth entirely) |
-
-> **Note:** If `TEAMVIEWER_API_TOKEN` is set, the server uses it directly and skips the OAuth flow. This is the simplest option if you already have a permanent token.
-
----
-
-## Step 4 — MCP Client Setup
-
-### Claude Desktop
+### Claude Desktop (stdio)
 
 Add the following to your `claude_desktop_config.json`:
 
@@ -91,9 +91,7 @@ Add the following to your `claude_desktop_config.json`:
       "command": "node",
       "args": ["/absolute/path/to/TV_MCP_public/dist/index.js"],
       "env": {
-        "TEAMVIEWER_CLIENT_ID": "your-client-id",
-        "TEAMVIEWER_CLIENT_SECRET": "your-client-secret",
-        "TEAMVIEWER_REDIRECT_URI": "http://localhost"
+        "TEAMVIEWER_API_TOKEN": "your-script-token"
       }
     }
   }
@@ -102,43 +100,79 @@ Add the following to your `claude_desktop_config.json`:
 
 Restart Claude Desktop after saving.
 
-### Claude Code (CLI)
+---
+
+### Claude Code (stdio)
 
 ```bash
 claude mcp add teamviewer \
-  -e TEAMVIEWER_CLIENT_ID=your-client-id \
-  -e TEAMVIEWER_CLIENT_SECRET=your-client-secret \
-  -e TEAMVIEWER_REDIRECT_URI=http://localhost \
+  -e TEAMVIEWER_API_TOKEN=your-script-token \
   -- node /absolute/path/to/TV_MCP_public/dist/index.js
 ```
 
-### Other MCP Clients
+---
 
-The server communicates over **stdio** and is compatible with any MCP-capable client. Pass the three environment variables when spawning the process.
+### Claude Desktop — Remote HTTP
+
+If the server is running remotely (e.g. exposed via ngrok), you can connect Claude Desktop without a local Node.js install:
+
+```json
+{
+  "mcpServers": {
+    "teamviewer": {
+      "url": "https://your-server-url/mcp"
+    }
+  }
+}
+```
 
 ---
 
-## Step 5 — Authenticate
+### Microsoft 365 Copilot / Copilot Studio (HTTP)
 
-Once the server is connected, run the OAuth flow from within your AI assistant:
+M365 Copilot requires the server to be reachable over HTTPS. The server must be started in HTTP mode.
 
-**1. Get the authorization URL**
+**Start the server in HTTP mode**
 
-Call `tv_oauth_get_auth_url` (optionally pass a `scope`). The tool returns an `authorization_url`.
-
-**2. Open the URL in your browser**
-
-Log in to TeamViewer and click **Allow**. You will be redirected to your `TEAMVIEWER_REDIRECT_URI` with a `code` parameter in the URL, e.g.:
-
-```
-http://localhost/?code=ABC123XYZ&state=...
+```bash
+TEAMVIEWER_API_TOKEN=your-script-token node dist/index.js --http
 ```
 
-**3. Exchange the code**
+The server listens on port `3000` by default. Set `HTTP_PORT` or `PORT` to override.
 
-Call `tv_oauth_exchange_code` and pass the `code` value. The access token and refresh token are saved to `~/.teamviewer-mcp/tokens.json` (permissions `0600`). All subsequent API calls use this token automatically.
+**Expose it over HTTPS**
 
-**Check status at any time** with `tv_oauth_token_status`.
+For testing, use [ngrok](https://ngrok.com):
+
+```bash
+ngrok http 3000
+```
+
+For production, deploy behind a reverse proxy (nginx, Caddy) or to a cloud platform (Azure App Service, etc.) with TLS termination.
+
+**Add to Copilot Studio**
+
+1. Open **Copilot Studio** and select your agent.
+2. Go to **Actions** → **Add an action** → **MCP server (preview)**.
+3. Set the **Server URL** to `https://your-host/mcp`.
+4. Set **Authentication** to **No authentication** (the server relies on network-level access control when no `MCP_BEARER_TOKEN` is set) or configure a static bearer token:
+   - Start the server with `MCP_BEARER_TOKEN=your-secret`
+   - In Copilot Studio, set auth to **API key**, parameter name `Authorization`, location **Header**, value `Bearer your-secret`
+5. Click **Next** — Copilot Studio will discover all 127 tools automatically.
+
+> **Note:** Copilot Studio routes requests through Azure API Management, which strips the `Authorization` header. If you use bearer token auth, set a custom header name (e.g. `X-API-Key`) and update the server check accordingly.
+
+---
+
+## OAuth2 Flow
+
+If you are using Option B (OAuth2 app) instead of a script token, authenticate from within your AI assistant after connecting:
+
+1. Call `tv_oauth_get_auth_url` — returns an authorization URL.
+2. Open the URL, log in, and click **Allow**.
+3. Call `tv_oauth_exchange_code` with the `code` from the redirect URL.
+
+Tokens are stored in `~/.teamviewer-mcp/tokens.json` (mode `0600`) and used automatically for all subsequent calls.
 
 ---
 
@@ -181,8 +215,11 @@ For full access during development you can select all scopes.
 ## Development
 
 ```bash
-# Run in development mode (no build step)
-TEAMVIEWER_CLIENT_ID=xxx TEAMVIEWER_CLIENT_SECRET=yyy TEAMVIEWER_REDIRECT_URI=http://localhost npm run dev
+# stdio mode (no build step)
+TEAMVIEWER_API_TOKEN=your-token npm run dev
+
+# HTTP mode (no build step)
+TEAMVIEWER_API_TOKEN=your-token npm run dev:http
 
 # Rebuild after changes
 npm run build
