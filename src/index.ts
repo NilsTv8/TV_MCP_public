@@ -2,7 +2,6 @@
 import { createServer, IncomingMessage, ServerResponse } from "node:http";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -163,22 +162,14 @@ function readBody(req: IncomingMessage): Promise<unknown> {
 async function startHttp() {
   const port = parseInt(process.env.HTTP_PORT ?? process.env.PORT ?? "3000", 10);
   const bearerSecret = process.env.MCP_BEARER_TOKEN;
-  if (!bearerSecret) {
-    throw new Error(
-      "MCP_BEARER_TOKEN environment variable must be set when running in HTTP mode. " +
-        "Set it to a long random secret and configure the same value in your MCP client."
-    );
-  }
-
-  const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-
-  await server.connect(transport);
 
   const httpServer = createServer(async (req: IncomingMessage, res: ServerResponse) => {
-    const authHeader = req.headers["authorization"] ?? "";
-    if (!authHeader.startsWith("Bearer ") || authHeader.slice(7) !== bearerSecret) {
-      res.writeHead(401, { "WWW-Authenticate": 'Bearer realm="teamviewer-mcp"' }).end("Unauthorized");
-      return;
+    if (bearerSecret) {
+      const authHeader = req.headers["authorization"] ?? "";
+      if (!authHeader.startsWith("Bearer ") || authHeader.slice(7) !== bearerSecret) {
+        res.writeHead(401, { "WWW-Authenticate": 'Bearer realm="teamviewer-mcp"' }).end("Unauthorized");
+        return;
+      }
     }
 
     const url = new URL(req.url ?? "/", `http://localhost`);
@@ -186,11 +177,56 @@ async function startHttp() {
       res.writeHead(404).end("Not found");
       return;
     }
+
+    res.setHeader("Content-Type", "application/json");
+
     try {
       const body = req.method === "POST" ? await readBody(req) : undefined;
-      await transport.handleRequest(req, res, body);
+      const msg = body as { jsonrpc: string; id?: unknown; method: string; params?: unknown };
+
+      // Notifications (no id) — acknowledge and ignore
+      if (!msg || !("id" in msg)) {
+        res.writeHead(202).end();
+        return;
+      }
+
+      const jsonrpc = "2.0";
+      const { id, method, params } = msg;
+
+      if (method === "initialize") {
+        res.writeHead(200).end(JSON.stringify({
+          jsonrpc, id,
+          result: {
+            protocolVersion: "2024-11-05",
+            capabilities: { tools: {} },
+            serverInfo: { name: "teamviewer-mcp", version: "1.0.0" },
+          },
+        }));
+        return;
+      }
+
+      if (method === "tools/list") {
+        res.writeHead(200).end(JSON.stringify({ jsonrpc, id, result: { tools: ALL_TOOLS } }));
+        return;
+      }
+
+      if (method === "tools/call") {
+        const { name, arguments: args } = params as { name: string; arguments: Record<string, unknown> };
+        const handler = TOOL_HANDLERS[name];
+        if (!handler) {
+          res.writeHead(200).end(JSON.stringify({ jsonrpc, id, error: { code: -32601, message: `Unknown tool: ${name}` } }));
+          return;
+        }
+        const client = getClient();
+        const result = await handler(name, args ?? {}, client);
+        res.writeHead(200).end(JSON.stringify({ jsonrpc, id, result }));
+        return;
+      }
+
+      res.writeHead(200).end(JSON.stringify({ jsonrpc, id, error: { code: -32601, message: `Method not found: ${method}` } }));
     } catch (err) {
-      if (!res.headersSent) res.writeHead(500).end("Internal server error");
+      const msg2 = err instanceof Error ? err.message : String(err);
+      if (!res.headersSent) res.writeHead(500).end(JSON.stringify({ jsonrpc: "2.0", error: { code: -32603, message: msg2 } }));
     }
   });
 
